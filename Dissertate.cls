@@ -286,10 +286,10 @@
 
 	\scshape{\Large{\bfseries{Università degli Studi di Padova}}} \\
 	\line(1, 0){400} \\
-	\scshape{\large{Department of Mathematics “Tullio Levi Civita”}} \\
+	\scshape{\large{Dipartimento di matematica “Tullio Levi Civita”}} \\
 
 	\vspace{5pt}
-	\small{\textit{Bachelor thesis in}}
+	\small{\textit{Tesi di laurea in}}
 	\@mastername
 
 	\setstretch{2.5}
@@ -304,12 +304,12 @@
 	\vfill
 	\begin{normalsize}
 	\begin{flushleft}
-	  \textit{Supervisor} \hfill \textit{Candidate}\\
+	  \textit{Supervisore} \hfill \textit{Candidato}\\
 	  \vspace{1pt}
 	  \@advisor \hfill \@author\\
 	  Università di Padova \\
 	  \vspace{6pt}
-	  \textit{Co-supervisor} \\
+	  \textit{Co-supervisore} \\
 	  \@coadvisorOne \\
 	  \@coadvisorOneUniversity
 	  \vspace{10pt}
