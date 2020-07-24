@@ -8,8 +8,8 @@
 
 % the front matter
 \input{frontmatter/personalize}
-% \maketitle
-% \copyrightpage
+%\maketitle
+%\copyrightpage
 \frontmatter
 \setstretch{\dnormalspacing}
 % \abstractpage
@@ -27,15 +27,30 @@
 \include{chapters/chapter1}
 \include{chapters/chapter2}
 \include{chapters/chapter3}
+\include{chapters/chapter4}
+\include{chapters/chapter5}
 \include{chapters/conclusion}
 
-\addcontentsline{toc}{chapter}{References}
-%\bibliographystyle{unstr}
-\bibliography{references}
+
+\glossarypage
+
+
 \cleardoublepage
 \phantomsection
-\addcontentsline{toc}{chapter}{Acknowledgments}
-\acknowledgments
+\addcontentsline{toc}{chapter}{Riferimenti}
+
+\bibliography{mybiblio.bib}
+
+
+%\printbibliography
+% \cleardoublepage
+% \phantomsection
+%\addcontentsline{toc}{chapter}{Acknowledgments}
+
+% The next two lines define the bibliography style to be used, and
+% the bibliography file.
+%\bibliographystyle{ACM-Reference-Format}
+%\bibliography{mybiblio}
 
 
 % \clearpage
@@ -44,5 +59,8 @@
 % \bibliographystyle{apalike2}
 
 % \include{endmatter/colophon}
+
+
+
 
 \end{document}

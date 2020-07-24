@@ -1,0 +1,228 @@
+%!TEX root = ../dissertation.tex
+%\begin{savequote}[75mm]
+%Nulla facilisi. In vel sem. Morbi id urna in diam dignissim feugiat. Proin molestie tortor eu velit. Aliquam erat %volutpat. Nullam ultrices, diam tempus vulputate egestas, eros pede varius leo.
+%\qauthor{Quoteauthor Lastname}
+%\end{savequote}
+
+\chapter{Analisi delle strutture di ART}
+\label{chap:analisi_art}
+
+Le librerie attualmente esistenti, \emph{DiPrint} e \emph{Anti-Plugin}, per l'identificazione di ambienti virtualizzati operano tutte a alto livello, permettendo agli attaccanti di intercettare le chiamate e cambiarne i valori di ritorno attraverso i \emph{Dynamic Proxy} di Java e il framework di hooking \emph{Whale}.
+La maggior parte del periodo di stage è stata impiegata allo studio di una nuova tecnica di detection che potesse affidarsi alle strutture interne del \emph{\gls{artg}}, in modo da mitigare delle possibili intercettazioni dei metodi.
+In questo capitolo verranno descritti i test effettuati e i campi studiati, evidenziando i successi e i fallimenti.
+Inoltre verrà illustrato come è stato possibile leggere i valori dalle strutture di \emph{ART}.
+
+\newpage
+
+\section{Tool per l'analisi dei field di ArtMethod}
+
+La lettura dei field di \emph{artMethod} è stata implementata tramite un'applicazione contenente una libreria a basso livello e grazie alla \emph{java reflection}. In questo modo sono stati recuperati i valori dei field direttamente dalla memoria centrale, calcolando i relativi offset di memoria.
+Questo è stato necessario, in quanto i valori dei field di un artMethod sono contenuti nella classe \texttt{art\_method} a basso livello.
+Il tool creato, chiamato \emph{Android-Runtime-Environment-data-reader} si può utilizzare compilando il suo codice sorgente.\footnote{\url{https://github.com/RiccardoCestaro/Android-Runtime-Environment-data-reader}}
+
+Il suo funzionamento si riassume in:
+\begin{itemize}
+    \item recupero della classe/i da analizzare tramite la \emph{Java Reflection}: 
+        \begin{lstlisting}[language = Java , frame = trBL , firstnumber = 1 , escapeinside={(*@}{@*)}]
+Class target = Class.forName("android.app.Activity");
+for ( Method method : target.getDeclaredMethods()) {
+    [..]
+}
+        \end{lstlisting}
+    \item recupero di ogni metodo attraverso un ciclo e in particolare per ogni metodo:
+    \begin{itemize}
+        \item rendere accessibile il metodo:
+            \begin{lstlisting}[language = Java , frame = trBL , firstnumber = 1 , escapeinside={(*@}{@*)}]
+method.setAccessible(true);
+            \end{lstlisting}
+        
+        \item trovare l'indirizzo del corrispondente \emph{artMethod} tramite la libreria a basso livello:
+        
+            \begin{lstlisting}[language = C , frame = trBL , firstnumber = 1 , escapeinside={(*@}{@*)}]
+jlong getMethodAddress(JNIEnv * env, jclass clazz, jobject method) {
+    return (jlong) env->FromReflectedMethod(method);
+}
+            \end{lstlisting}
+        
+        \item recuperare i field tramite i corrispondenti offset di ognuno di essi, sommando a loro l'indirizzo dell'\emph{artMethod}:
+        
+            \begin{lstlisting}[language = Java , frame = trBL , firstnumber = 1 , escapeinside={(*@}{@*)}]
+memget(methodAddress + varOffsetAddress,length);
+            \end{lstlisting}
+        
+        \item recuperare ogni valore e stamparlo a video:
+        
+            \begin{lstlisting}[language = Java , frame = trBL , firstnumber = 1 , escapeinside={(*@}{@*)}]
+jbyteArray android_memget(JNIEnv *env, jclass _cls, jlong src, jint length) {
+    jbyteArray dest = env->NewByteArray(length);
+    if (dest == NULL) {
+        return NULL;
+    }
+    unsigned char *destPnt = (unsigned char*)env->GetByteArrayElements(dest,0);
+    unsigned char *srcPnt = (unsigned char*)src;
+    for(int i = 0; i < length; ++i) {
+        destPnt[i] = srcPnt[i];
+    }
+    env->ReleaseByteArrayElements(dest, (jbyte *)destPnt, 0);
+    return dest;
+}
+            \end{lstlisting}
+            
+    \end{itemize}
+\end{itemize}
+
+Ovviamente il tool permette di recuperare le informazioni sulle strutture di \emph{ART}, quindi è compatibile da \emph{Android Lollipop 5.0}.
+
+\subsection*{Calcolo dell'offset dei field}
+
+L'offset dei field è stato calcolato in base alla loro posizione all'interno del codice e dal loro tipo.
+
+
+\begin{lstlisting}[language = Java , frame = trBL , firstnumber = 1 , escapeinside={(*@}{@*)}]
+uint32_t dex_code_item_offset_;
+
+\end{lstlisting}
+
+Ad esempio il tipo del field sopra è \emph{uint32\_t}, cioè 32bit e quindi 4byte. Se fosse il primo field della classe allora i parametri per leggere il valore di \emph{dex\_code\_item\_offset\_} sarebbero l'indirizzo della classe e la lunghezza del field, cioè 4byte.
+La dimensione dei puntatori, invece, dipendono anche dall'architettura del processore. Infatti se il dispositivo ha un'architettura \emph{armeabi-v7} i suoi puntatori avranno dimensione 4byte, se invece l'architettura è \emph{arm64} i puntatori avranno dimensione 8byte.
+
+
+
+\newpage
+
+\section{Analisi dei field presenti distinti per versione di Android}
+
+
+
+Come si può notare dalla Tab. \ref{tab:fields} i field contenuti nella classe \emph{artMethod} dipendono dalla versione di \emph{Android}. In particolare si nota che il field \emph{hotness\_count\_} utilizzato per la compilazione ibrida, è ovviamente disponibile da \emph{Android 7.0}.
+
+I field principali più importanti sono:
+
+\begin{itemize}
+    \item \emph{declaring\_class\_}: contiene il riferimento della classe dichiarante;
+    \item \emph{access\_flags\_}: contiene i \emph{modifiers} del metodo, come \emph{public, private o protected};
+    \item \emph{dex\_code\_item\_offset\_}: contiene l'offset del metodo dall'inizio del dex code;
+    \item \emph{method\_index\_}: contiene l'indice del metodo della classe dichiarante;
+    \item \emph{hotness\_count\_}: indica l'\emph{hotness} del metodo, cioè il suo livello di utilizzo;
+    \item \emph{entry\_point\_from\_quick\_compiled\_code\_}: entry point per il codice precompilato \emph{AoT}, se non è precompilato è \texttt{0}.
+\end{itemize}
+
+\begin{table} [H]
+
+\begin{tabular}{l|lllllllll}    \toprule
+\emph{field}  & 5.0  & 5.1  & 6.0 & 7.0 & 7.1 & 8.0 & 8.1 & 9.0 & 10  \\\midrule
+
+\row declaring\_class\_ &  X   &   X  &  X   &   X  &  X   &  X   &   X  &  X   &  X  \\ 
+\row access\_flags\_ &  X  &  X   &  X   &   X  &  X   &  X   &  X   &  X   &  X  \\ 
+\row dex\_code\_item\_offset\_ &  X  &  X   &  X   &   X  &   X  &  X   &  X   &   X  &  X  \\ 
+\row dex\_method\_index\_ &  X  &  X   &  X   &  X   &  X   &  X   &  X   &  X   &  X  \\ 
+\row method\_index\_ &  X  &   X  &  X   &  X   &   X  &   X  &  X   &   X  &   X \\ 
+\row hotness\_count\_ &   &   &   &  X   &  X   & X  &  X   &  X   & X   \\ 
+\row dex\_cache\_resolved\_methods\_ & X    &  X   &  X   &  X   &  X   & X  &   X  &  &    \\ 
+\row dex\_cache\_resolved\_types\_ &  X  &  X  &  X   &  X  &  X   &   &  &   &    \\ 
+\row entry\_point\_from\_jni\_ &  X   &  X   &  X   &  X   &   X  &   &   &   &  \\ 
+\row entry\_point\_from\_quick\_compiled\_code\_ &  X  &  X  &  X  &  X  &  X &  X  &X  & X  &  X \\
+\row dex\_cache\_strings\_ &  X   &   & &  &   &   &   &   &    \\
+\row entry\_point\_from\_interpreter\_ &   X  &  X   &  X   &   &   &   &   &   &  \\ 
+\row entry\_point\_from\_portable\_compiled\_code\_ &  X   &   X  &   &  &   &   &   &   &    \\ 
+\row gc\_map\_ &  X   &   &   &   &   &   &   &  \\ 
+\row data\_ &   &   &   &   &   &   X  & X    &  X   &  X  \\ 
+\row imt\_index\_ &   &   &   &   &   &   &   &   &  X  \\ \bottomrule \hline
+\end{tabular}
+
+\caption{Tabella del tracciamento dei field per versione di Android}
+\label{tab:fields}
+\end{table}
+
+\section{Dump dei field di ArtMethod}
+
+Analizzando il codice sorgente di \emph{DroidPlugin} e \emph{VirtualApp}, si possono identificare le classi sulle quali vengono applicati degli \emph{\gls{hookg}} attraverso i \emph{dynamic proxy}.
+L'idea iniziale è stata quella di effettuare dei dump dei valori dei campi degli \emph{artMethod} dei metodi sui quali vengono applicati degli \emph{\gls{hookg}}.
+Le classi su cui è stato eseguito il dump sono \emph{Activity} e \emph{ActivityThread}. Oltre ad effettuare il dump degli \emph{artMethod} di queste classi, viene fatto un dump anche di un metodo interno all'applicazione \emph{Android-Runtime-Environment-data-reader}.
+
+Le applicazioni confrontate con l'ambiente nativo per ogni versione di Android dalla 5.0 alla 10 sono:
+
+\begin{itemize}
+    \item com.lbe.parallel.intl;
+    \item com.ludashi.dualspace;
+    \item info.cloneapp.mochat.in.goast;
+    \item com.parallel.space.lite;
+    \item com.exelliance.multiaccounts;
+    \item com.ludashi.superboost;
+    \item com.in.parallel.accounts;
+    \item com.polestar.domultiple.
+\end{itemize}
+
+\subsection*{classe Activity}
+
+I field degli \emph{artMethod} della classe \emph{Activity} risultano essere tutti uguali. L'\emph{\gls{hookg}} viene applicato a un livello superiore tramite \emph{dynamic proxy}, quindi non è possibile individuare differenze.
+Inoltre tutti i metodi della classe \emph{Activity} vengono compilati \emph{AoT} sia in ambiente nativo che in ambiente virtualizzato, infatti il field \emph{hotness\_count} risulta sempre nullo.
+
+\subsection*{classe ActivityThread}
+
+I field degli \emph{artMethod} della classe \emph{ActivityThread} risultano essere tutti uguali fino a \emph{Android Nougat 7.1}, infatti fino a questa versione di \emph{Android} i metodi della classe sono compilati tutti \emph{AoT} anche in ambiente nativo. 
+
+Da \emph{Android Oreo 8.0} a \emph{Android 10} è possibile notare che il valore dell'\emph{hotness\_count} dei metodi sul quale è stato applicato un \emph{\gls{hookg}} e che non vengono compilati \emph{Ahead-of-Time} è fissato a \texttt{0}.
+Questo implica che i metodi della classe \emph{ActivityThread} negli ambienti virtualizzati vengono compilati \emph{AoT}. L'identificazione in questo caso ha successo.
+
+
+\section{Considerazione dei risultati}
+
+Il dump di tutti field di \emph{artMethod} dalla versione \emph{Lollipop 5.0} alla versione \emph{10} di \emph{Android} ha portato a un solo caso di successo, l'\emph{hotness\_count}.
+L'\emph{hotness\_count} ha un aumento incrementale in base a quante volte viene chiamato un certo metodo e il suo valore di incremento dipende dalla complessità del metodo. Serve a decidere quando compilare il metodo e salvare il codice all'interno della \emph{JiT cache}. Il suo funzionamento è stato spiegato nel capitolo \ref{chap:analisi_art}, Analisi di ART.
+
+Gli studi effettuati riescono a individuare una virtualizzazione da \emph{Android Oreo 8.0} a \emph{Android 10}, riuscendo a coprire circa il 60\% dei dispositivi \emph{Android}. 
+ I test effettuati risultano molto promettenti, infatti tutti i dispositivi testati confermano che il valore dell'\emph{hotness\_count} sia il medesimo e dipenda solamente dalla versione di \emph{Android} nel caso in cui il metodo sia compilato \emph{JiT}. Inoltre i test dimostrano anche che tutti i metodi della classe \emph{ActivityThread} vengono compilati \emph{AoT} nel caso di ambiente virtualizzato, come in Tab. \ref{tab:hotnessxapp}.
+
+
+\begin{table} [H]
+\begin{tabular}{l|lllllllll}    \toprule
+\emph{Android}  & native & A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8\\\midrule
+\row 8.0 & 5 & \texttt{0} & \texttt{0} & \texttt{0} &  \texttt{0} & \texttt{0} & \texttt{0} & \texttt{0} &  \texttt{0}    \\ 
+\row 8.1 & 5 & \texttt{0} & \texttt{0} & \texttt{0} &  \texttt{0} & \texttt{0} & \texttt{0} & \texttt{0} &  \texttt{0}    \\ 
+\row 9 & 5 & \texttt{0} & \texttt{0} & \texttt{0} &   & \texttt{0} & \texttt{0} &  &      \\ 
+\row 10 & 1 & \texttt{0} & \texttt{0} & \texttt{0} &   & \texttt{0} & \texttt{0} &  &      \\   \bottomrule \hline
+\end{tabular}
+
+
+
+\caption[Tabella dei valori di hotness\_count\_ per applicazione]{Tabella dei valori di hotness\_count\_ per applicazione \\ A1 = com.lbe.parallel.intl \\ A2 = com.ludashi.dualspace \\ A3 = 
+info.cloneapp.mochat.in.goast \\ A4 = 
+com.parallel.space.lite \\ A5 =
+com.exelliance.multiaccounts \\ A6 =
+com.ludashi.superboost \\ A7 =
+com.in.parallel.accounts \\ A8 =
+com.polestar.domultiple}
+\label{tab:hotnessxapp}
+\end{table}
+
+\newpage
+
+La Tab. \ref{tab:hotnessvalues} illustra come i valori del metodo \emph{currentActivityThread} siano fissi e dipendano solo dalla versione di \emph{Android}.
+Infatti nelle versioni di \emph{Android} prima della versione \emph{10} il valore dell'\emph{hotness\_count} è sempre 5, mentre in \emph{Android 10} il valore è sempre 1.
+
+
+\begin{table} [H]
+\begin{tabular}{l|l}    \toprule
+\emph{device}  & hotness\_count  \\\midrule
+\row Xiaomi mi10 - Android 10 arm64 & 1    \\ 
+\row Xiaomi mi9 - Android 10 arm64 &  1   \\ 
+\row Xiaomi mi9t - Android 9 arm64 &  5   \\ 
+\row Xiaomi mi9t Pro - Android 10 arm64 &  1   \\ 
+\row Oneplus 3 - Android 8.1 arm64 &  5  \\ 
+\row Oneplus 6 - Android 10 arm64 &  1  \\ 
+\row Oneplus 6t - Android 10 arm64 &   1   \\ 
+\row Samsung Galaxy S8 - Android 9 arm64 &  5    \\ 
+\row Samsung Galaxy A70 - Android 10 arm64 & 1  \\ 
+\row Samsung Galaxy S4 i9505 - Android 8 (AOSP) armeabi-v7 & 5  \\ 
+\row LG G4 - Android 8 arm64 &  5   \\ 
+\row AVD emulator - Android 8 x86 &  5   \\
+\row AVD emulator - Android 8.1 x86 &  5   \\
+\row AVD emulator - Android 9 x86 &  5   \\
+\row AVD emulator - Android 10 x86 &  1   \\ \bottomrule \hline
+\end{tabular}
+\caption{Tabella dei valori di hotness\_count in ambiente nativo}
+\label{tab:hotnessvalues}
+\end{table}
+
+

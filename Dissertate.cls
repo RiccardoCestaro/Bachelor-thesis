@@ -95,6 +95,9 @@
                 margin=0pt,
                 figurewithin=chapter,
                 tablewithin=chapter]{caption}
+                
+                
+                
 \renewcommand{\thefootnote}{\fnsymbol{footnote}}
 \RequirePackage{microtype}
 
@@ -143,14 +146,14 @@
 \usepackage[titletoc]{appendix}
 \renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
 \renewcommand{\cftchapfont}{\normalsize \scshape}
-\renewcommand\listfigurename{Listing of figures}
-\renewcommand\listtablename{Listing of tables}
+\renewcommand\listfigurename{Indice delle immagini}
+\renewcommand\listtablename{Indice delle tabelle}
 
 % Endmatter
 \renewcommand{\setthesection}{\arabic{chapter}.A\arabic{section}}
 
 % References.
-\renewcommand\bibname{References}
+\renewcommand\bibname{Riferimenti}
 %\RequirePackage[super,comma,numbers]{natbib}
 \RequirePackage[comma,numbers]{natbib}
 \renewcommand{\bibnumfmt}[1]{[#1]}
@@ -158,6 +161,15 @@
 \renewcommand*{\chapterheadstartvskip}{\vspace*{-0.5\baselineskip}}
 \renewcommand*{\chapterheadendvskip}{\vspace{1.3\baselineskip}}
 \bibliographystyle{IEEEtran}
+
+
+% Glossary
+\usepackage[toc, acronym]{glossaries}
+\input{glossario} % database di termini
+\makeglossaries
+\definecolor{redd}{HTML}{cc0000} 
+\renewcommand{\glsfirstoccur}{\textsuperscript{[\color{redd}G\color{black}]}}
+\newcommand{\glsfirstoccurspace}{\glsfirstoccur \hspace*{0.1cm}}
 
 % An environment for paragraph-style section.
 \providecommand\newthought[1]{%
@@ -241,19 +253,20 @@
 	\frontispiece
 	\dedicationpage
 	\abstractpage
-	\sommario
+	\acknowledgments
+	%\sommario
 	\tableofcontents
 	\phantomsection
 	\clearpage
 
 	% figure listing - required if you have any figures
-	\addcontentsline{toc}{chapter}{List of figures}
+	\addcontentsline{toc}{chapter}{Indice delle immagini}
 	\listoffigures
 	\phantomsection
 	\cleardoublepage
 
 	% table listing - required if you have any tables
-	\addcontentsline{toc}{chapter}{List of tables}
+	\addcontentsline{toc}{chapter}{Indice delle tabelle}
 	\listoftables
 	\phantomsection
 	\cleardoublepage
@@ -264,6 +277,8 @@
 	\setcounter{page}{1}
 	\pagenumbering{arabic}
 }
+
+\renewcommand*\contentsname{Indice}
 
 \newcommand{\cover}{
 	\pagenumbering{roman}
@@ -355,7 +370,7 @@
 
 \newcommand{\acknowledgments}{
 	\phantomsection
-	\chapter*{Acknowledgments}
+	\chapter*{Ringraziamenti}
 	\noindent
 	\input{frontmatter/thanks}
 	\vspace*{\fill} \newpage
@@ -395,4 +410,30 @@
     \include{endmatter/colophon}
 }
 
+\newcommand{\glossarypage}{
+	\phantomsection
+    \printglossaries
+}
 
+
+\usepackage{courier} %% Sets font for listing as Courier.
+\usepackage{listings, xcolor}
+\lstset{
+tabsize = 3, %% set tab space width
+showstringspaces = false, %% prevent space marking in strings, string is defined as the text that is generally printed directly to the console
+numbers = left, %% display line numbers on the left
+commentstyle = \color{green}, %% set comment color
+keywordstyle = \color{blue}, %% set keyword color
+stringstyle = \color{red}, %% set string color
+rulecolor = \color{black}, %% set frame color to avoid being affected by text color
+basicstyle = \fontsize{9}{11} \ttfamily , %% set listing font and size
+breaklines = true, %% enable line breaking
+numberstyle = \tiny,
+}
+
+
+
+\usepackage{microtype}                  % microtipografia
+
+\usepackage{mparhack,fixltx2e,relsize}  % finezze tipografiche
+\usepackage{adjustbox}
